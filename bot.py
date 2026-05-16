@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from telegram.error import TelegramError
 import yt_dlp
 
-TOKEN = 8914679676:AAEeV07KSkz_w5y-qbESc0BTFxB9d5LOvhA'
+TOKEN = '8914679676:AAEeV07KSkz_w5y-qbESc0BTFxB9d5LOvhA'
 CHANNEL_ID = '@AlhadiSoft'
 CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
