@@ -9,25 +9,37 @@ from telegram.error import TelegramError
 import yt_dlp
 
 TOKEN = '8914679676:AAEbKf4zukBYg6Ibd7VsDSOSFPWCinPKRig'
-CHANNEL_ID = '@AlhadiSoft'  # اسم مستخدم القناة للتحقق من الاشتراك
+CHANNEL_ID = '@AlhadiSoft'
 CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
 user_urls = {}
 
+# إعدادات متطورة جداً لتجاوز حظر خوادم يوتيوب ومنع الـ 403 Forbidden
 PROXY_OPTIONS = {
     'quiet': True,
     'skip_download': True,
     'geo_bypass': True,
     'nocheckcertificate': True,
-    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-    'restrictfilenames': True
+    'restrictfilenames': True,
+    'legacy_user_agent': False,
+    'impersonate': 'chrome',  # محاكاة متصفح كروم حقيقي لتجنب كشف السيرفر
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['android', 'web'],
+            'skip': ['dash', 'hls']
+        }
+    },
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Mode': 'navigate'
+    }
 }
 
-# خادم ويب متوافق لإرضاء منصة ريندر ومنع أخطاء المنافذ
 def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     handler = http.server.SimpleHTTPRequestHandler
-    # السماح بإعادة استخدام المنفذ لتجنب الأخطاء عند إعادة التشغيل
     socketserver.TCPServer.allow_reuse_address = True
     try:
         with socketserver.TCPServer(("", port), handler) as httpd:
@@ -36,7 +48,6 @@ def start_dummy_server():
     except Exception as e:
         print(f"Web server notice: {e}")
 
-# التحقق الفعلي من اشتراك المستخدم بالقناة
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -44,7 +55,6 @@ async def is_subscribed(user_id: int, bot) -> bool:
             return True
         return False
     except TelegramError:
-        # كإجراء أمان احتياطي لو واجه البوت مشكلة صلاحيات مؤقتة بالقناة سيمرر الطلب
         return True
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,8 +123,9 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             ]
             await msg.delete()
             await update.message.reply_text(f"📌 {title}\n\n👇 اختر الجودة أو الصيغة المناسبة للتحميل:", reply_markup=InlineKeyboardMarkup(buttons))
-        except Exception:
-            await msg.edit_text("❌ تعذر فحص الرابط. تأكد من صلاحية الفيديو أو جرب رابطاً آخر.")
+        except Exception as e:
+            print(f"Extraction Error: {e}")
+            await msg.edit_text("❌ تعذر فحص الرابط من خلال خادم المنصة الحالي، يرجى المحاولة مرة أخرى أو تجربة رابط آخر.")
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح أو النقر على أحد أزرار الخدمات.")
 
@@ -170,11 +181,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(fn): 
             os.remove(fn)
         user_urls.pop(chat_id, None)
-    except Exception:
-        await query.edit_message_text("❌ نعتذر، حجم الملف يتجاوز السعة المجانية للبوت (50 ميجا)، أو السيرفر مشغول.")
+    except Exception as e:
+        print(f"Download Error: {e}")
+        await query.edit_message_text("❌ نعتذر، حجم الملف يتجاوز السعة المجانية للبوت (50 ميجا)، أو أن يوتيوب يحظر هذا الطلب حالياً.")
 
 async def main():
-    # تشغيل سيرفر الويب الوهمي لتجاوز قيود ريندر
     threading.Thread(target=start_dummy_server, daemon=True).start()
     
     app = Application.builder().token(TOKEN).build()
@@ -184,19 +195,16 @@ async def main():
     
     print("Bot startup sequence initialized successfully...")
     
-    # تهيئة البوت وتحديثاته بالتوافق مع الخوادم الحديثة
     async with app:
         await app.initialize()
         await app.start()
         await app.updater.start_polling()
-        # إبقاء التطبيق مستيقظاً ومستجيباً
         while True:
             await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    # تشغيل حلقة الأحداث الآمنة للسيرفرات
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot stopped.")
-    
+        
