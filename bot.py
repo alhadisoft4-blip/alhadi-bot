@@ -1,11 +1,15 @@
-import os, asyncio, http.server, socketserver, threading
+import os
+import asyncio
+import http.server
+import socketserver
+import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
 import yt_dlp
 
 TOKEN = '8914679676:AAEbKf4zukBYg6Ibd7VsDSOSFPWCinPKRig'
-CHANNEL_ID = '@AlhadiSoft'  # اسم مستخدم القناة العام بدون الرابط للتحقق من الاشتراك
+CHANNEL_ID = '@AlhadiSoft'  # اسم مستخدم القناة للتحقق من الاشتراك
 CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
 user_urls = {}
@@ -19,14 +23,20 @@ PROXY_OPTIONS = {
     'restrictfilenames': True
 }
 
-# خادم وهمي لضمان استقرار السيرفر السحابي ريندر
+# خادم ويب متوافق لإرضاء منصة ريندر ومنع أخطاء المنافذ
 def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        httpd.serve_forever()
+    # السماح بإعادة استخدام المنفذ لتجنب الأخطاء عند إعادة التشغيل
+    socketserver.TCPServer.allow_reuse_address = True
+    try:
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            print(f"Web server routing active on port {port}")
+            httpd.serve_forever()
+    except Exception as e:
+        print(f"Web server notice: {e}")
 
-# دالة برمجية للتحقق مما إذا كان المستخدم مشتركاً في القناة أم لا
+# التحقق الفعلي من اشتراك المستخدم بالقناة
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -34,13 +44,12 @@ async def is_subscribed(user_id: int, bot) -> bool:
             return True
         return False
     except TelegramError:
-        # في حال لم يتمكن البوت من فحص الحساب (مثلاً البوت ليس مشرفاً بالقناة)، سيمرر الطلب كإجراء احتياطي
+        # كإجراء أمان احتياطي لو واجه البوت مشكلة صلاحيات مؤقتة بالقناة سيمرر الطلب
         return True
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # التحقق من الاشتراك عند الضغط على Start
     if not await is_subscribed(user_id, context.bot):
         keyboard = [[InlineKeyboardButton("📢 اشترك في القناة هنا", url=CHANNEL_INVITE_LINK)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -51,7 +60,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # الأزرار السفلية بعد التعديل (حذف الرقم وإضافة خدماتنا)
     reply_keyboard = [
         [KeyboardButton("🟢 Start")],
         [KeyboardButton("💼 خدماتنا"), KeyboardButton("👥 فريق الدعم الهادي سوفت")]
@@ -67,7 +75,6 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = update.message.chat_id
     user_id = update.effective_user.id
     
-    # منع غير المشتركين من استخدام الأزرار والروابط
     if not await is_subscribed(user_id, context.bot):
         keyboard = [[InlineKeyboardButton("📢 اشترك في القناة هنا", url=CHANNEL_INVITE_LINK)]]
         await update.message.reply_text(
@@ -91,23 +98,21 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if text.startswith("http://") or text.startswith("https://"):
-        # نص الانتظار الجديد عند طلب إحضار الفيديو
         msg = await update.message.reply_text("⏳ نرجوا الانتظار طلبك قيد التقدم...")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             with yt_dlp.YoutubeDL(PROXY_OPTIONS) as ydl:
                 info = await loop.run_in_executor(None, lambda: ydl.extract_info(text, download=False))
             title = info.get('title', 'Video')
             user_urls[chat_id] = text
             
-            # خيارات الجودات المطلوبة الجديدة (عالية، متوسطة، عادية، ضعيفة + صوت)
             buttons = [
                 [InlineKeyboardButton("🎬 جودة عالية (Best)", callback_data="high"), InlineKeyboardButton("🎬 جودة متوسطة (Medium)", callback_data="mid")],
                 [InlineKeyboardButton("🎬 جودة عادية (Normal)", callback_data="low"), InlineKeyboardButton("🎬 جودة ضعيفة (Worst)", callback_data="worst")],
                 [InlineKeyboardButton("🎵 تحويله إلى صوت MP3", callback_data="audio")]
             ]
             await msg.delete()
-            await update.message.reply_text(f"📌 {title}\n\n👇 اختر الجودة أو الصيغة المناسبة للتحميل المعجل:", reply_markup=InlineKeyboardMarkup(buttons))
+            await update.message.reply_text(f"📌 {title}\n\n👇 اختر الجودة أو الصيغة المناسبة للتحميل:", reply_markup=InlineKeyboardMarkup(buttons))
         except Exception:
             await msg.edit_text("❌ تعذر فحص الرابط. تأكد من صلاحية الفيديو أو جرب رابطاً آخر.")
     else:
@@ -126,7 +131,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("📥 جاري تحميل الملف ومعالجته عبر السيرفر، يرجى الانتظار...")
     is_audio = (choice == "audio")
     
-    # تحديد الجودات برمجياً بناءً على اختيار المستخدم الجديد
     if is_audio:
         fmt = 'bestaudio/best'
     elif choice == "high":
@@ -150,7 +154,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         opts['merge_output_format'] = 'mp4'
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=True))
@@ -167,18 +171,32 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(fn)
         user_urls.pop(chat_id, None)
     except Exception:
-        await query.edit_message_text("❌ نعتذر، حجم هذا الملف المحدد يتجاوز السعة المجانية المتاحة للبوت (50 ميجا).")
+        await query.edit_message_text("❌ نعتذر، حجم الملف يتجاوز السعة المجانية للبوت (50 ميجا)، أو السيرفر مشغول.")
 
-def main():
+async def main():
+    # تشغيل سيرفر الويب الوهمي لتجاوز قيود ريندر
     threading.Thread(target=start_dummy_server, daemon=True).start()
     
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
     app.add_handler(CallbackQueryHandler(button_click))
-    print("Bot is running successfully with new features...")
-    app.run_polling()
+    
+    print("Bot startup sequence initialized successfully...")
+    
+    # تهيئة البوت وتحديثاته بالتوافق مع الخوادم الحديثة
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        # إبقاء التطبيق مستيقظاً ومستجيباً
+        while True:
+            await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    main()
+    # تشغيل حلقة الأحداث الآمنة للسيرفرات
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped.")
     
