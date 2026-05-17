@@ -15,7 +15,6 @@ CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
 user_urls = {}
 
-# الإعدادات الاحترافية الشاملة لمحاكاة هواتف الآيفون والأندرويد لتجنب كشف السيرفر
 PROXY_OPTIONS = {
     'quiet': True,
     'geo_bypass': True,
@@ -28,7 +27,7 @@ PROXY_OPTIONS = {
         }
     },
     'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': '*/*',
         'Accept-Language': 'ar-YE,ar;q=0.9,en-US;q=0.8,en;q=0.7',
     }
@@ -114,24 +113,33 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [InlineKeyboardButton("🎵 تحويله إلى صوت MP3", callback_data="audio")]
         ]
 
-        # الخيار الأول: الفحص السريع عبر الخادم الخارجي الذكي لتجنب ضغط الـ IP الخاص بريندر
-        api_url = f"https://api.cobalt.tools/api/json"
-        payload = {"url": text, "filenamePattern": "basic"}
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        
+        # المحرك الأول: خادم Cobalt الأساسي
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(api_url, json=payload, headers=headers, timeout=8) as response:
+                async with session.post("https://api.cobalt.tools/api/json", json={"url": text, "filenamePattern": "basic"}, headers={"Accept": "application/json", "Content-Type": "application/json"}, timeout=6) as response:
                     if response.status == 200:
                         res_data = await response.json()
                         if "url" in res_data or res_data.get("status") == "stream":
                             await msg.delete()
-                            await update.message.reply_text("📌 تم فحص الرابط ومعالجته بنجاح!\n\n👇 اختر الجودة أو الصيغة المناسبة لبدء الرفع المباشر:", reply_markup=InlineKeyboardMarkup(buttons))
+                            await update.message.reply_text("📌 تم فحص وفك الرابط بنجاح!\n\n👇 اختر الجودة أو الصيغة المناسبة لبدء الرفع المباشر:", reply_markup=InlineKeyboardMarkup(buttons))
                             return
         except Exception:
-            pass # في حال حدوث ضغط على السيرفر الخارجي، يمر الكود فوراً وبسلاسة للمحرك الاحتياطي الداخلي المطور بالأسفل
+            pass
 
-        # الخيار الثاني التلقائي (المحرك الداخلي المطور بمحاكاة هواتف iOS الصارمة):
+        # المحرك الثاني: خادم فحص بديل ومفتوح
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://co.wuk.sh/api/json?url={text}", timeout=6) as response:
+                    if response.status == 200:
+                        res_data = await response.json()
+                        if "url" in res_data:
+                            await msg.delete()
+                            await update.message.reply_text("📌 تم فحص الرابط عبر السيرفر الاحتياطي!\n\n👇 اختر الجودة المناسبة للتحميل الآن:", reply_markup=InlineKeyboardMarkup(buttons))
+                            return
+        except Exception:
+            pass
+
+        # المحرك الثالث والأقوى: الفحص الداخلي الصارم بمحاكاة متصفحات حقيقية متطورة
         loop = asyncio.get_running_loop()
         try:
             with yt_dlp.YoutubeDL(PROXY_OPTIONS) as ydl:
@@ -140,8 +148,8 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             await msg.delete()
             await update.message.reply_text(f"📌 {title}\n\n👇 اختر الجودة أو الصيغة المناسبة للتحميل:", reply_markup=InlineKeyboardMarkup(buttons))
         except Exception as e:
-            print(f"Final Extraction Error: {e}")
-            await msg.edit_text("❌ تعذر جلب تفاصيل هذا الفيديو حالياً بسبب قيود الحماية. يرجى المحاولة مرة أخرى أو تجربة رابط آخر بعد قليل.")
+            print(f"All Engines Failed: {e}")
+            await msg.edit_text("❌ نعتذر، يوتيوب يفرض قيوداً أمنية مشددة على هذا الرابط تحديداً، يرجى المحاولة مع رابط فيديو آخر.")
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح أو النقر على أحد أزرار الخدمات.")
 
@@ -155,7 +163,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ انتهت الجلسة البرمجية الحالية، يرجى إرسال الرابط مجدداً.")
         return
         
-    await query.edit_message_text("📥 جاري سحب واستخراج الملف عبر المحرك السحابي الآمن، يرجى الانتظار...")
+    await query.edit_message_text("📥 جاري سحب وتجهيز الملف سحابياً، يرجى الانتظار...")
     is_audio = (choice == "audio")
     
     if is_audio:
@@ -188,7 +196,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fn = ydl.prepare_filename(info)
             fn = os.path.splitext(fn)[0] + ('.mp3' if is_audio else '.mp4')
             
-        await query.edit_message_text("🚀 اكتمل المعالجة بنجاح! جاري الرفع الفوري إلى تيليجرام...")
+        await query.edit_message_text("🚀 اكتملت المعالجة! جاري الرفع الفوري إلى تيليجرام...")
         with open(fn, 'rb') as f:
             if is_audio:
                 await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم تحويل وفصل الصوت بنجاح - مؤسسة الهادي سوفت")
@@ -223,3 +231,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Bot stopped.")
+                        
