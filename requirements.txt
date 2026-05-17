@@ -1,3 +1,2 @@
 python-telegram-bot==21.1.1
-yt-dlp
-aiohttp
+aiohttp==3.10.5
