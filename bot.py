@@ -15,7 +15,7 @@ CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
 user_urls = {}
 
-# 🌐 قائمة المحركات السحابية العالمية المحدثة لكسر الحظر (تُجرب بالترتيب)
+# 🌐 قائمة المحركات السحابية العالمية المحدثة لكسر الحظر
 COBALT_INSTANCES = [
     "https://api.cobalt.tools/api/json",
     "https://cobalt.fastest.workers.dev/api/json",
@@ -24,19 +24,18 @@ COBALT_INSTANCES = [
 ]
 
 def start_dummy_server():
-    """خادم وهمي لمنع السيرفرات المجانية مثل Render من الدخول في وضع النوم"""
+    """خادم وهمي يعمل في خيط منفصل تماماً لمنع ريندر من النوم دون التأثير على البوت"""
     port = int(os.environ.get("PORT", 8080))
     handler = http.server.SimpleHTTPRequestHandler
     socketserver.TCPServer.allow_reuse_address = True
     try:
         with socketserver.TCPServer(("", port), handler) as httpd:
-            print(f"✅ Web server routing active on port {port}")
+            print(f"✅ Web server active on port {port}")
             httpd.serve_forever()
     except Exception as e:
         print(f"⚠️ Web server notice: {e}")
 
 async def is_subscribed(user_id: int, bot) -> bool:
-    """التحقق من اشتراك المستخدم في قناة الهادي سوفت"""
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ['member', 'administrator', 'creator']
@@ -95,7 +94,6 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح.")
 
 async def try_download_from_instances(url, quality, is_audio):
-    """المحرك الذكي: يطوف على كل السيرفرات العالمية المتاحة حتى ينجح في كسر الحظر"""
     payload = {
         "url": url,
         "videoQuality": quality,
@@ -111,9 +109,9 @@ async def try_download_from_instances(url, quality, is_audio):
                         res_data = await response.json()
                         file_url = res_data.get("url")
                         if file_url:
-                            return file_url # إرجاع رابط الملف المباشر فور نجاح السيرفر بكسر الحظر
+                            return file_url
             except Exception:
-                continue # إذا كان السيرفر محظوراً أو متوقفاً، انتقل فوراً للسيرفر التالي في القائمة
+                continue
     return None
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,7 +129,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_audio = (choice == "audio")
     quality = "720" if choice == "audio" else choice
     
-    # محاولة السحب عبر شبكة السيرفرات البديلة لقهر الحظر
     direct_file_url = await try_download_from_instances(url, quality, is_audio)
     
     if not direct_file_url:
@@ -142,12 +139,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fn = f"{chat_id}_hadi." + ("mp3" if is_audio else "mp4")
     
     try:
-        # تحميل الملف بنظام التجزئة (Streaming) لحماية رامات السيرفر المجاني من الانهيار
         async with aiohttp.ClientSession() as session:
             async with session.get(direct_file_url) as file_resp:
                 if file_resp.status == 200:
                     with open(fn, "wb") as f:
-                        async for chunk in file_resp.content.iter_chunked(1024 * 1024): # 1 ميجابايت لكل دفعة
+                        async for chunk in file_resp.content.iter_chunked(1024 * 1024):
                             f.write(chunk)
                     
                     await query.edit_message_text("⚡ اكتملت المعالجة! جاري الرفع المباشر لـ تيليجرام...")
@@ -165,19 +161,36 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(fn): os.remove(fn)
         await query.edit_message_text("❌ حدث خطأ أثناء رفع الملف، تأكد من أن الحجم لا يتجاوز سعة التيليجرام المجانية.")
 
-def main():
-    # تشغيل خادم الحفاظ على السيرفر حياً
+async def main():
+    # تشغيل خادم ويب وهمي لمنع خروج المنصة
     threading.Thread(target=start_dummy_server, daemon=True).start()
     
-    # بناء وتشغيل البوت بأسلوب معالجة الأحداث المتقدم
+    # بناء وتأسيس البوت بشكل متزامن صحيح لمنع تعارض الخيوط
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
     app.add_handler(CallbackQueryHandler(button_click))
     
-    print("🚀 AlhadiSoft Anti-Ban Engine Active...")
-    app.run_polling()
+    # تهيئة وتحديث محرك الـ Polling يدوياً لحل مشكلة الـ Runtime RuntimeError
+    await app.initialize()
+    await app.updater.start_polling()
+    await app.start()
+    
+    print("🚀 AlhadiSoft Anti-Ban Engine successfully initialized on Render!")
+    
+    # إبقاء البوت حياً ومتزامناً مع السيرفر السحابي دون انقطاع
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        await app.updater.stop()
+        await app.stop()
 
 if __name__ == '__main__':
-    main()
+    # تشغيل الحلقة الأساسية لـ asyncio بشكل متوافق وآمن
+    try:
+        asyncio.run(main())
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
     
