@@ -38,6 +38,20 @@ def start_dummy_server():
     except Exception as e:
         logger.warning(f"⚠️ Web server alert: {e}")
 
+# 🔍 خوارزمية ذكية ومحصنة لاستخراج الـ Video ID من أي رابط يوتيوب بالعالم
+def extract_youtube_id(url):
+    # الطريقة الأولى: الفحص عبر الأنماط القياسية (بما فيها Shorts)
+    match = re.search(r'(?:youtu\.be\/|youtube\.com\/(?:v\/|embed\/|watch\?v=|shorts\/)?)([a-zA-Z0-9_-]{11})', url)
+    if match:
+        return match.group(1)
+    
+    # الطريقة الثانية (الفحص العميق): تشريح الرابط والبحث عن المعرف المكون من 11 حرفاً كحائط صد أخير
+    parts = re.split(r'[/\?=&]', url)
+    for part in parts:
+        if len(part) == 11 and re.match(r'^[a-zA-Z0-9_-]{11}$', part):
+            return part
+    return None
+
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -62,7 +76,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🚀 مرحباً بك في محرك السحب اللامركزي الخارق - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من (يوتيوب، فيسبوك، تيك توك) وسيتم سحبه فوراً وبأمان.",
+        "🚀 مرحباً بك في محرك السحب اللامركزي المحصن - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من (يوتيوب، فيسبوك، تيك توك) وسيتم فكه وسحبه فوراً.",
         reply_markup=markup
     )
 
@@ -96,38 +110,39 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
 
-# 🛠️ محرك المعالجة الهجين: فك تشفير يوتيوب عبر الأنفاق اللامركزية وبقية المواقع عبر yt-dlp
+# 🛠️ محرك المعالجة الهجين المطور
 def download_processor(url, is_audio, output_template):
     import yt_dlp
     
-    # 💥 إذا كان الرابط يخص يوتيوب، نقوم باختراق الحظر عبر شبكة الخوادم الحليفة
+    # 💥 فك تشفير يوتيوب اللامركزي عبر الأنفاق المحدثة
     if "youtube.com" in url or "youtu.be" in url:
-        logger.info("📺 YouTube URL detected! Initiating Decentralized Tunnel Bypass...")
+        logger.info("📺 YouTube URL detected! Running Bulletproof Extraction...")
         
-        # استخراج الـ Video ID بدقة من أي رابط (Shorts, Watch, Embed)
-        reg = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
-        match = re.search(reg, url)
-        if not match:
-            raise Exception("Invalid YouTube URL ID")
-        video_id = match.group(1)
+        video_id = extract_youtube_id(url)
+        if not video_id:
+            raise Exception("لم يتمكن النظام من العثور على معرف فيديو صالح في الرابط المرسل.")
+            
+        logger.info(f"🎯 Target Video ID isolated successfully: {video_id}")
         
-        # قائمة خوادم شبكة الانفاق العالمية الحية وغير المحظورة
+        # شبكة خوادم حليفة موسعة ومحدثة للتخلص من الضغط
         invidious_instances = [
             "https://invidious.privacydev.net",
             "https://iv.melmac.space",
             "https://invidious.perennialte.ch",
             "https://yt.artemislena.eu",
-            "https://invidious.flokinet.to"
+            "https://invidious.flokinet.to",
+            "https://invidious.projectsegfau.lt",
+            "https://invidious.slipfox.xyz",
+            "https://iv.ggtyler.dev"
         ]
         
         direct_stream_url = None
         
-        # البحث عن سيرفر متاح لسحب الرابط الخام منه
         for instance in invidious_instances:
             try:
                 api_url = f"{instance}/api/v1/videos/{video_id}"
-                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req, timeout=6) as response:
+                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req, timeout=5) as response:
                     data = json.loads(response.read().decode('utf-8'))
                     
                     if is_audio:
@@ -137,21 +152,29 @@ def download_processor(url, is_audio, output_template):
                             direct_stream_url = audio_streams[0].get("url")
                             break
                     else:
+                        # جلب الفيديو المدمج الجاهز لتسريع السحب
                         streams = data.get("formatStreams", [])
                         mp4_streams = [f for f in streams if "mp4" in f.get("type", "")]
                         if mp4_streams:
-                            direct_stream_url = mp4_streams[0].get("url")
+                            direct_stream_url = mp4_streams[-1].get("url")
                             break
-            except Exception:
-                continue # إذا كان السيرفر مشغولاً ننتقل للتالي فوراً
+                        else:
+                            # احتياطي في حال عدم وجود فيديو مدمج
+                            adaptive = data.get("adaptiveFormats", [])
+                            video_adaptive = [f for f in adaptive if f.get("type", "").startswith("video/mp4")]
+                            if video_adaptive:
+                                direct_stream_url = video_adaptive[0].get("url")
+                                break
+            except Exception as inst_err:
+                logger.warning(f"Instance {instance} skipped: {inst_err}")
+                continue 
                 
         if not direct_stream_url:
-            raise Exception("جميع أنفاق فك تشفير يوتيوب مضغوطة حالياً، يرجى المحاولة بعد قليل.")
+            raise Exception("جميع أنفاق فك التشفير مضغوطة حالياً، أعد المحاولة بعد ثوانٍ.")
             
-        # تحويل الرابط المستهدف ليكون هو الرابط الخام المباشر، لتقوم أداة yt-dlp بتحميله كملف وسائط عادي بدون حظر
         url = direct_stream_url
 
-    # 🌐 إعدادات التحميل النهائية للملف الخام أو المنصات الأخرى (فيسبوك، تيك توك)
+    # 🌐 التنفيذ النهائي عبر yt-dlp للمقاطع الخام أو المنصات الأخرى
     ydl_opts = {
         'outtmpl': output_template,
         'quiet': True,
@@ -195,7 +218,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري معالجة وسحب البيانات بنظام كسر التشفير اللامركزي...")
+        await query.edit_message_text("🚀 جاري اختراق التشفير وسحب ملف الوسائط الخام...")
         
         filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
         final_file = f"{base_name}.mp3" if is_audio else filename
@@ -203,11 +226,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(final_file) and not is_audio:
              final_file = base_name + ".mp4"
              
-        await query.edit_message_text("⚡ اكتمل التوزيع السحابي بنجاح! جاري الرفع الفوري لـ تيليجرام...")
+        await query.edit_message_text("⚡ اكتمل السحب اللامركزي بنجاح! جاري الرفع الفوري لـ تيليجرام...")
         
         with open(final_file, 'rb') as f:
             if is_audio:
-                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت ونقله بنجاح - الهادي سوفت")
+                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح - الهادي سوفت")
             else:
                 await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
         
@@ -219,7 +242,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Engine Failure: {e}")
         for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
             if os.path.exists(base_name + ext): os.remove(base_name + ext)
-        await query.edit_message_text(f"❌ عذراً هندسة! واجه السيرفر عائقاً جراء الضغط العالمي.\nوصف المشكلة: {str(e)[:110]}")
+        await query.edit_message_text(f"❌ عذراً هندسة! واجه السيرفر عائقاً أثناء المعالجة.\nالوصف: {str(e)[:110]}")
 
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
@@ -233,7 +256,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft Decentralized Anti-Bot Engine is operational!")
+    logger.info("🚀 AlhadiSoft Bulletproof Decoupled Engine is operational!")
     
     try:
         while True:
