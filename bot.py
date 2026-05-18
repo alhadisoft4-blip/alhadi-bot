@@ -4,6 +4,9 @@ import logging
 import threading
 import http.server
 import socketserver
+import re
+import json
+import urllib.request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
@@ -59,7 +62,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🚀 مرحباً بك في محرك السحب المباشر الداخلي المستقر - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من أي منصة (يوتيوب، فيسبوك، تيك توك) لبدء المعالجة فوراً.",
+        "🚀 مرحباً بك في محرك السحب اللامركزي الخارق - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من (يوتيوب، فيسبوك، تيك توك) وسيتم سحبه فوراً وبأمان.",
         reply_markup=markup
     )
 
@@ -74,7 +77,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if text == "🟢 Start":
-        await update.message.reply_text("🔄 المحرك الداخلي نشط وجاهز، أرسل رابط الفيديو المُراد سحبه الآن.")
+        await update.message.reply_text("🔄 المحرك اللامركزي نشط وجاهز، أرسل رابط الفيديو الآن.")
         return
     elif text == "💼 خدماتنا":
         await update.message.reply_text("🛠️ **خدمات مؤسسة الهادي سوفت:**\n\n👈 تطوير وترقية البوتات والأنظمة البرمجية وحلول سيرفرات فك التشفير السحابية.")
@@ -93,59 +96,81 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
 
-# 🛠️ دالة المعالجة الذكية لكسر حظر يوتيوب بدون كوكيز
+# 🛠️ محرك المعالجة الهجين: فك تشفير يوتيوب عبر الأنفاق اللامركزية وبقية المواقع عبر yt-dlp
 def download_processor(url, is_audio, output_template):
     import yt_dlp
     
+    # 💥 إذا كان الرابط يخص يوتيوب، نقوم باختراق الحظر عبر شبكة الخوادم الحليفة
+    if "youtube.com" in url or "youtu.be" in url:
+        logger.info("📺 YouTube URL detected! Initiating Decentralized Tunnel Bypass...")
+        
+        # استخراج الـ Video ID بدقة من أي رابط (Shorts, Watch, Embed)
+        reg = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
+        match = re.search(reg, url)
+        if not match:
+            raise Exception("Invalid YouTube URL ID")
+        video_id = match.group(1)
+        
+        # قائمة خوادم شبكة الانفاق العالمية الحية وغير المحظورة
+        invidious_instances = [
+            "https://invidious.privacydev.net",
+            "https://iv.melmac.space",
+            "https://invidious.perennialte.ch",
+            "https://yt.artemislena.eu",
+            "https://invidious.flokinet.to"
+        ]
+        
+        direct_stream_url = None
+        
+        # البحث عن سيرفر متاح لسحب الرابط الخام منه
+        for instance in invidious_instances:
+            try:
+                api_url = f"{instance}/api/v1/videos/{video_id}"
+                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=6) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    
+                    if is_audio:
+                        adaptive = data.get("adaptiveFormats", [])
+                        audio_streams = [f for f in adaptive if f.get("type", "").startswith("audio/")]
+                        if audio_streams:
+                            direct_stream_url = audio_streams[0].get("url")
+                            break
+                    else:
+                        streams = data.get("formatStreams", [])
+                        mp4_streams = [f for f in streams if "mp4" in f.get("type", "")]
+                        if mp4_streams:
+                            direct_stream_url = mp4_streams[0].get("url")
+                            break
+            except Exception:
+                continue # إذا كان السيرفر مشغولاً ننتقل للتالي فوراً
+                
+        if not direct_stream_url:
+            raise Exception("جميع أنفاق فك تشفير يوتيوب مضغوطة حالياً، يرجى المحاولة بعد قليل.")
+            
+        # تحويل الرابط المستهدف ليكون هو الرابط الخام المباشر، لتقوم أداة yt-dlp بتحميله كملف وسائط عادي بدون حظر
+        url = direct_stream_url
+
+    # 🌐 إعدادات التحميل النهائية للملف الخام أو المنصات الأخرى (فيسبوك، تيك توك)
     ydl_opts = {
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
-        }
     }
     
-    # 💥 استراتيجية الالتفاف حول حظر يوتيوب
-    if "youtube.com" in url or "youtu.be" in url:
-        logger.info("📺 YouTube URL detected! Applying Legacy Progressive bypass strategy...")
-        if is_audio:
-            # استخدام صيغة الصوت المدمجة المباشرة لمنع طلب توثيق البوت
-            ydl_opts.update({
-                'format': 'bestaudio[ext=m4a]/bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            })
-        else:
-            # هُنا السر: إجبار يوتيوب على تقديم صيغة 22 (720p) أو 18 (360p) الجاهزتين والمفتوحتين للأجهزة القديمة
-            ydl_opts.update({
-                'format': '22/18/best[ext=mp4]/best',
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['tvhtml5'],  # محاكاة مشغل شاشات التلفزيون الذكية الذاتي التوثيق
-                        'skip': ['webpage']
-                    }
-                }
-            })
+    if is_audio:
+        ydl_opts.update({
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        })
     else:
-        # 🌐 باقي المنصات (فيسبوك، تيك توك، إلخ) تعمل بالصيغ القصوى كالمعتاد لأنها لا تحظر السيرفر
-        logger.info("🌐 Non-YouTube URL detected! Running standard cloud extract...")
-        if is_audio:
-            ydl_opts.update({
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-            })
-        else:
-            ydl_opts.update({
-                'format': 'best[ext=mp4]/best',
-            })
+        ydl_opts.update({
+            'format': 'best[ext=mp4]/best',
+        })
         
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -170,7 +195,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري معالجة الرابط عبر قنوات البث الكلاسيكية الآمنة...")
+        await query.edit_message_text("🚀 جاري معالجة وسحب البيانات بنظام كسر التشفير اللامركزي...")
         
         filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
         final_file = f"{base_name}.mp3" if is_audio else filename
@@ -178,11 +203,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(final_file) and not is_audio:
              final_file = base_name + ".mp4"
              
-        await query.edit_message_text("⚡ اكتمل التشفير والسحب بنجاح! جاري الرفع الفوري لـ تيليجرام...")
+        await query.edit_message_text("⚡ اكتمل التوزيع السحابي بنجاح! جاري الرفع الفوري لـ تيليجرام...")
         
         with open(final_file, 'rb') as f:
             if is_audio:
-                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح - الهادي سوفت")
+                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت ونقله بنجاح - الهادي سوفت")
             else:
                 await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
         
@@ -194,7 +219,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Engine Failure: {e}")
         for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
             if os.path.exists(base_name + ext): os.remove(base_name + ext)
-        await query.edit_message_text(f"❌ عذراً هندسة! فشل تجاوز الحظر السحابي لـ يوتيوب.\nالوصف: {str(e)[:110]}")
+        await query.edit_message_text(f"❌ عذراً هندسة! واجه السيرفر عائقاً جراء الضغط العالمي.\nوصف المشكلة: {str(e)[:110]}")
 
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
@@ -208,7 +233,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft Smart Bypass Engine is operational!")
+    logger.info("🚀 AlhadiSoft Decentralized Anti-Bot Engine is operational!")
     
     try:
         while True:
