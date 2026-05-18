@@ -1,21 +1,27 @@
 import os
 import asyncio
-import http.server
-import socketserver
-import threading
+import logging
+from aiohttp import web
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
-# 🔒 إعدادات البيئة الأساسية
+# إعداد السجلات لمراقبة الأداء
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 🔒 الإعدادات الأساسية
 TOKEN = os.environ.get("BOT_TOKEN", "8914679676:AAEeV07KSkz_w5y-qbESc0BTFxB9d5LOvhA")
 CHANNEL_ID = '@AlhadiSoft'
 CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
+PORT = int(os.environ.get("PORT", 8080))
+
+# رابط السيرفر الخاص بك لمنع النوم (استبدله برابط Render الخاص بك إذا تغير)
+APP_URL = "https://alhadi-bot.onrender.com"
 
 user_urls = {}
 
-# 🌐 قائمة المحركات السحابية العالمية المحدثة لكسر الحظر
 COBALT_INSTANCES = [
     "https://api.cobalt.tools/api/json",
     "https://cobalt.fastest.workers.dev/api/json",
@@ -23,18 +29,37 @@ COBALT_INSTANCES = [
     "https://cobalt-api.lcom.cloud/api/json"
 ]
 
-def start_dummy_server():
-    """خادم وهمي يعمل في خيط منفصل تماماً لمنع ريندر من النوم دون التأثير على البوت"""
-    port = int(os.environ.get("PORT", 8080))
-    handler = http.server.SimpleHTTPRequestHandler
-    socketserver.TCPServer.allow_reuse_address = True
-    try:
-        with socketserver.TCPServer(("", port), handler) as httpd:
-            print(f"✅ Web server active on port {port}")
-            httpd.serve_forever()
-    except Exception as e:
-        print(f"⚠️ Web server notice: {e}")
+# 🌐 1. خادم ويب حقيقي ومتوافق مع Render لحل مشكلة HTTP 502
+async def handle_root(request):
+    return web.Response(text="🚀 Alhadi Soft Engine is Running perfectly 24/7!", content_type="text/plain")
 
+async def handle_health(request):
+    return web.Response(text="OK", status=200)
+
+async def start_webhook_server():
+    app = web.Application()
+    app.router.add_get('/', handle_root)
+    app.router.add_get('/health', handle_health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+    logger.info(f"✅ Web Server successfully bound to port {PORT}")
+
+# 🔄 2. نظام التنشيط الذاتي الدائم لمنع خمول السيرفر (Self-Ping)
+async def keep_alive_loop():
+    await asyncio.sleep(30) # الانتظار حتى يستقر إقلاع السيرفر
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(APP_URL, timeout=10) as response:
+                    if response.status == 200:
+                        logger.info("⚡ Self-Ping successful. System kept alive.")
+            except Exception as e:
+                logger.warning(f"⚠️ Keep-alive ping missed: {e}")
+            await asyncio.sleep(600) # فحص وتنشيط كل 10 دقائق منعاً للنوم
+
+# 🤖 3. وظائف البوت الأساسية
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -94,17 +119,13 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح.")
 
 async def try_download_from_instances(url, quality, is_audio):
-    payload = {
-        "url": url,
-        "videoQuality": quality,
-        "downloadMode": "audio" if is_audio else "video"
-    }
+    payload = {"url": url, "videoQuality": quality, "downloadMode": "audio" if is_audio else "video"}
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     
     async with aiohttp.ClientSession() as session:
         for instance in COBALT_INSTANCES:
             try:
-                async with session.post(instance, json=payload, headers=headers, timeout=15) as response:
+                async with session.post(instance, json=payload, headers=headers, timeout=12) as response:
                     if response.status == 200:
                         res_data = await response.json()
                         file_url = res_data.get("url")
@@ -132,10 +153,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     direct_file_url = await try_download_from_instances(url, quality, is_audio)
     
     if not direct_file_url:
-        await query.edit_message_text("❌ عذراً! جميع محاولات كسر الحظر السحابية فشلت حالياً، يرجى المحاولة لاحقاً أو تجربة رابط آخر.")
+        await query.edit_message_text("❌ جميع محاولات كسر الحظر فشلت، يرجى تجربة رابط آخر.")
         return
 
-    await query.edit_message_text("🚀 تم اختراق الحظر بنجاح! جاري معالجة وحفظ الملف سحابياً...")
+    await query.edit_message_text("🚀 تم اختراق الحظر بنجاح! جاري تحميل الملف سحابياً...")
     fn = f"{chat_id}_hadi." + ("mp3" if is_audio else "mp4")
     
     try:
@@ -149,36 +170,39 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await query.edit_message_text("⚡ اكتملت المعالجة! جاري الرفع المباشر لـ تيليجرام...")
                     with open(fn, 'rb') as f:
                         if is_audio:
-                            await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم فصل وتحويل الصوت بنجاح - الهادي سوفت")
+                            await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم تحويل الصوت بنجاح - الهادي سوفت")
                         else:
-                            await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وسحب الفيديو بنجاح - الهادي سوفت")
+                            await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم سحب الفيديو بنجاح - الهادي سوفت")
                     
                     if os.path.exists(fn): os.remove(fn)
                     user_urls.pop(chat_id, None)
                 else:
-                    await query.edit_message_text("❌ فشل السيرفر في قراءة دفق البيانات الأخير.")
-    except Exception as e:
+                    await query.edit_message_text("❌ فشل السيرفر في معالجة دفق البيانات.")
+    except Exception:
         if os.path.exists(fn): os.remove(fn)
-        await query.edit_message_text("❌ حدث خطأ أثناء رفع الملف، تأكد من أن الحجم لا يتجاوز سعة التيليجرام المجانية.")
+        await query.edit_message_text("❌ حدث خطأ أثناء الرفع، قد يكون حجم الملف كبيراً جداً.")
 
+# ⚙️ 4. المحرك الأساسي لإدارة المهام المتزامنة معاً
 async def main():
-    # تشغيل خادم ويب وهمي لمنع خروج المنصة
-    threading.Thread(target=start_dummy_server, daemon=True).start()
+    # تشغيل خادم الويب المتوافق مع Render لحل خطأ الـ 502
+    await start_webhook_server()
     
-    # بناء وتأسيس البوت بشكل متزامن صحيح لمنع تعارض الخيوط
+    # تشغيل حلقة التنشيط الذاتي لمنع خمول السيرفر ونومه
+    asyncio.create_task(keep_alive_loop())
+    
+    # تهيئة وتشغيل البوت
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
-    app.add_handler(CallbackQueryHandler(button_click))
+    app.add_handler(CallbackQueryHandler(buttons_click if 'buttons_click' in globals() else button_click))
     
-    # تهيئة وتحديث محرك الـ Polling يدوياً لحل مشكلة الـ Runtime RuntimeError
     await app.initialize()
     await app.updater.start_polling()
     await app.start()
     
-    print("🚀 AlhadiSoft Anti-Ban Engine successfully initialized on Render!")
+    logger.info("🚀 AlhadiSoft System Engine is fully armed and running 24/7!")
     
-    # إبقاء البوت حياً ومتزامناً مع السيرفر السحابي دون انقطاع
+    # المحافظة على استمرار المهام الخلفية
     try:
         while True:
             await asyncio.sleep(3600)
@@ -187,10 +211,9 @@ async def main():
         await app.stop()
 
 if __name__ == '__main__':
-    # تشغيل الحلقة الأساسية لـ asyncio بشكل متوافق وآمن
     try:
         asyncio.run(main())
     except RuntimeError:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main())
-    
+        
