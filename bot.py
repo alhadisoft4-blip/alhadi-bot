@@ -4,8 +4,6 @@ import logging
 import threading
 import http.server
 import socketserver
-import urllib.request
-import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
@@ -37,19 +35,6 @@ def start_dummy_server():
     except Exception as e:
         logger.warning(f"⚠️ Web server alert: {e}")
 
-# 🌐 جلب قائمة بروكسيات حية ومجانية لتخطي حظر آي بي ريندر
-def get_free_proxies():
-    try:
-        url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=yes&anonymity=anonymous"
-        response = urllib.request.urlopen(url, timeout=8)
-        proxies = response.read().decode('utf-8').strip().split('\n')
-        cleaned_proxies = [p.strip() for p in proxies if p.strip()]
-        logger.info(f"📡 Fetched {len(cleaned_proxies)} fresh proxies successfully.")
-        return cleaned_proxies
-    except Exception as e:
-        logger.error(f"❌ Failed to fetch proxy list: {e}")
-        return []
-
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -74,7 +59,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🚀 مرحباً بك في محرك السحب الآلي المطور - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من أي منصة مباشرة لبدء المعالجة بدون كوكيز.",
+        "🚀 مرحباً بك في محرك السحب المباشر الداخلي المستقر - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو من أي منصة (يوتيوب، فيسبوك، تيك توك) لبدء المعالجة فوراً.",
         reply_markup=markup
     )
 
@@ -89,7 +74,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if text == "🟢 Start":
-        await update.message.reply_text("🔄 المحرك نشط وجاهز، أرسل رابط الفيديو المُراد سحبه الآن.")
+        await update.message.reply_text("🔄 المحرك الداخلي نشط وجاهز، أرسل رابط الفيديو المُراد سحبه الآن.")
         return
     elif text == "💼 خدماتنا":
         await update.message.reply_text("🛠️ **خدمات مؤسسة الهادي سوفت:**\n\n👈 تطوير وترقية البوتات والأنظمة البرمجية وحلول سيرفرات فك التشفير السحابية.")
@@ -108,65 +93,63 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
 
-# 🛠️ محرك المعالجة المعتمد على تدوير البروكسيات وعميل التلفزيون الذكي
+# 🛠️ دالة المعالجة الذكية لكسر حظر يوتيوب بدون كوكيز
 def download_processor(url, is_audio, output_template):
     import yt_dlp
-    
-    # محاولة جلب البروكسيات
-    proxy_list = get_free_proxies()
     
     ydl_opts = {
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        # 📺 التمويه عبر عميل التلفزيون لتخطي فحص البوتات الصارم
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['tv', 'web_embedded'],
-                'skip': ['webpage']
-            }
-        },
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (SmartHub; SMART-TV; Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
         }
     }
     
-    if is_audio:
-        ydl_opts.update({
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
+    # 💥 استراتيجية الالتفاف حول حظر يوتيوب
+    if "youtube.com" in url or "youtu.be" in url:
+        logger.info("📺 YouTube URL detected! Applying Legacy Progressive bypass strategy...")
+        if is_audio:
+            # استخدام صيغة الصوت المدمجة المباشرة لمنع طلب توثيق البوت
+            ydl_opts.update({
+                'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            })
+        else:
+            # هُنا السر: إجبار يوتيوب على تقديم صيغة 22 (720p) أو 18 (360p) الجاهزتين والمفتوحتين للأجهزة القديمة
+            ydl_opts.update({
+                'format': '22/18/best[ext=mp4]/best',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['tvhtml5'],  # محاكاة مشغل شاشات التلفزيون الذكية الذاتي التوثيق
+                        'skip': ['webpage']
+                    }
+                }
+            })
     else:
-        ydl_opts.update({
-            'format': 'best[ext=mp4]/best',
-        })
-
-    # إستراتيجية التكرار: إذا فشل آي بي السيرفر أو البروكسي الحالي، يتم تجربة بروكسي آخر تلقائياً
-    attempts = 3
-    last_error = None
-    
-    for i in range(attempts):
-        try:
-            if i > 0 and proxy_list:
-                selected_proxy = random.choice(proxy_list)
-                ydl_opts['proxy'] = f"http://{selected_proxy}"
-                logger.info(f"🔄 Attempt {i+1}: Routing traffic via Proxy -> {selected_proxy}")
-            else:
-                logger.info(f"🔄 Attempt {i+1}: Trying default cloud route...")
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                return ydl.prepare_filename(info)
-        except Exception as e:
-            last_error = e
-            logger.warning(f"⚠️ Route {i+1} failed: {e}")
-            continue
-            
-    raise last_error
+        # 🌐 باقي المنصات (فيسبوك، تيك توك، إلخ) تعمل بالصيغ القصوى كالمعتاد لأنها لا تحظر السيرفر
+        logger.info("🌐 Non-YouTube URL detected! Running standard cloud extract...")
+        if is_audio:
+            ydl_opts.update({
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            })
+        else:
+            ydl_opts.update({
+                'format': 'best[ext=mp4]/best',
+            })
+        
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        return ydl.prepare_filename(info)
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -187,7 +170,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري سحب البيانات عبر نفق التمويه التلقائي (بدون ملفات)...")
+        await query.edit_message_text("🚀 جاري معالجة الرابط عبر قنوات البث الكلاسيكية الآمنة...")
         
         filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
         final_file = f"{base_name}.mp3" if is_audio else filename
@@ -201,7 +184,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if is_audio:
                 await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح - الهادي سوفت")
             else:
-                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم سحب الفيديو بنجاح - الهادي سوفت")
+                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
         
         if os.path.exists(final_file): os.remove(final_file)
         user_urls.pop(chat_id, None)
@@ -211,7 +194,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Engine Failure: {e}")
         for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
             if os.path.exists(base_name + ext): os.remove(base_name + ext)
-        await query.edit_message_text(f"❌ عذراً هندسة! فشل تجاوز الحظر السحابي هذه المرة.\nالوصف: {str(e)[:110]}")
+        await query.edit_message_text(f"❌ عذراً هندسة! فشل تجاوز الحظر السحابي لـ يوتيوب.\nالوصف: {str(e)[:110]}")
 
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
@@ -225,7 +208,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft No-Cookies Standalone Engine is operational!")
+    logger.info("🚀 AlhadiSoft Smart Bypass Engine is operational!")
     
     try:
         while True:
