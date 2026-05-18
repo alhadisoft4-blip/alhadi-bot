@@ -8,18 +8,22 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
 
-# إعداد السجلات لمراقبة الأداء
+# تفعيل مشغل ومثبت FFmpeg تلقائياً داخل السيرفر المجاني
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+except Exception as e:
+    print(f"FFmpeg path notice: {e}")
+
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 🔒 الإعدادات الأساسية (تأكد من ضبط الـ Token في Render كمتغير بيئة)
 TOKEN = os.environ.get("BOT_TOKEN", "8914679676:AAEeV07KSkz_w5y-qbESc0BTFxB9d5LOvhA")
 CHANNEL_ID = '@AlhadiSoft'
 CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
 user_urls = {}
 
-# 🌐 خادم وهمي سريع لمنع ريندر من إعطاء خطأ 502 أو النوم
 def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
     handler = http.server.SimpleHTTPRequestHandler
@@ -31,7 +35,6 @@ def start_dummy_server():
     except Exception as e:
         logger.warning(f"⚠️ Web server alert: {e}")
 
-# 🔐 التحقق من الاشتراك الإجباري في القناة
 async def is_subscribed(user_id: int, bot) -> bool:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -90,7 +93,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
 
-# 🛠️ محرك التحميل الداخلي الصامت باستخدام yt-dlp المتزامن عبر الخيوط
+# 🛠️ دالة المعالجة المزودة بأنظمة التمويه والـ Spoofing لكسر حظر الداتا سنتر
 def download_processor(url, is_audio, output_template):
     import yt_dlp
     
@@ -98,7 +101,16 @@ def download_processor(url, is_audio, output_template):
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None, # لكسر حظر يوتيوب الصارم إذا دعت الحاجة
+        # 🔑 التمويه الخارق: إجبار السيرفر على محاكاة أجهزة الأندرويد والـ iOS لتخطي الحظر الجغرافي وحظر السيرفرات
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios'],
+                'skip': ['webpage']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1'
+        }
     }
     
     if is_audio:
@@ -111,7 +123,7 @@ def download_processor(url, is_audio, output_template):
             }],
         })
     else:
-        # اختيار أفضل جودة مدمجة (فيديو + صوت) لا تتخطى سعة سيرفر ريندر المجاني
+        # سحب جودة مدمجة مباشرة لتخفيف الضغط على المعالج والرام المجاني
         ydl_opts.update({
             'format': 'best[ext=mp4]/best',
         })
@@ -134,22 +146,18 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("🔄 جاري الاتصال المباشر بالمنصة وحظر خوارزميات التتبع...")
     is_audio = (choice == "audio")
     
-    # تحضير المسار والملف النظيف
     base_name = f"{chat_id}_hadi"
     output_template = f"{base_name}.%(ext)s"
     
     try:
-        # تشغيل وظيفة yt-dlp في خيط خارجي متزامن لمنع تجميد البوت أثناء التحميل
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري سحب دفق البيانات مباشرة إلى السيرفر السحابي الخاص بك...")
+        await query.edit_message_text("🚀 جاري معالجة وسحب البيانات بنظام التمويه السحابي للموبايل...")
         
         filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
-        
-        # تصحيح الامتداد النهائي في حالة تحويل الـ MP3
         final_file = f"{base_name}.mp3" if is_audio else filename
         
         if not os.path.exists(final_file) and not is_audio:
-             final_file = base_name + ".mp4" # صمام أمان للامتداد الرسمي
+             final_file = base_name + ".mp4"
              
         await query.edit_message_text("⚡ اكتمل التشفير والسحب بنجاح! جاري الرفع الفوري لـ تيليجرام...")
         
@@ -159,19 +167,18 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
         
-        # تنظيف المجلد بعد الرفع لعدم ملء مساحة السيرفر
         if os.path.exists(final_file): os.remove(final_file)
         user_urls.pop(chat_id, None)
         await query.delete_message()
         
     except Exception as e:
         logger.error(f"Engine Failure: {e}")
-        # تنظيف بقايا الملفات الفاشلة إن وجدت
+        # تنظيف فوري لأي مخلفات فاشلة
         for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
             if os.path.exists(base_name + ext): os.remove(base_name + ext)
-        await query.edit_message_text("❌ فشل المحرك الداخلي في معالجة هذا الرابط، يرجى التأكد من أن الفيديو ليس خاصاً أو محمياً بقفل.")
+        # إظهار رسالة تفصيلية للمطور لمعرفة العطل بدقة بدلاً من الرسالة القديمة
+        await query.edit_message_text(f"❌ عذراً! واجه المحرك عائقاً أثناء السحب الإجباري.\nوصف العطل: {str(e)[:100]}")
 
-# ⚙️ المحرك الأساسي لتهيئة الخدمات المتزامنة
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
     
@@ -184,7 +191,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft Standalone Engine is operational!")
+    logger.info("🚀 AlhadiSoft Camouflaged Engine is operational!")
     
     try:
         while True:
