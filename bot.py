@@ -4,11 +4,16 @@ import logging
 import threading
 import http.server
 import socketserver
-import json
-import urllib.request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import TelegramError
+
+# تفعيل وتثبيت FFmpeg تلقائياً داخل السيرفر السحابي
+try:
+    import static_ffmpeg
+    static_ffmpeg.add_paths()
+except Exception as e:
+    print(f"FFmpeg path notice: {e}")
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,7 +59,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🚀 محرك السحب السحابي المطور (الجيل الخامس) - مؤسسة الهادي سوفت جاهز للعمل!\n\n👇 أرسل رابط الفيديو من أي منصة (يوتيوب، فيسبوك، تيك توك، إلخ) للبث المباشر.",
+        "🚀 أهلاً بك في تحديث المحرك الإحترافي المضاد للحظر - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو الآن (يوتيوب، فيسبوك، تيك توك، إنستغرام) وسيتم معالجته فوراً بأعلى جودة.",
         reply_markup=markup
     )
 
@@ -69,13 +74,13 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if text == "🟢 Start":
-        await update.message.reply_text("🔄 المحرك السحابي نشط، أرسل رابط الفيديو المُراد سحبه الآن.")
+        await update.message.reply_text("🔄 المحرك المطور نشط وجاهز، أرسل الرابط الآن هندسة.")
         return
     elif text == "💼 خدماتنا":
-        await update.message.reply_text("🛠️ **خدمات مؤسسة الهادي سوفت:**\n\n👈 تطوير وترقية البوتات والأنظمة البرمجية وحلول سيرفرات فك التشفير السحابية.")
+        await update.message.reply_text("🛠️ **خدمات مؤسسة الهادي سوفت:**\n\n👈 تطوير وترقية البوتات، كسر حظر السيرفرات، وحلول الشبكات والأنظمة البرمجية.")
         return
     elif text == "👥 فريق الدعم الهادي سوفت":
-        await update.message.reply_text("👋 للتواصل بنا مباشرة لحلول السيرفرات والتطبيقات:\n👉 t.me/AlhadiSoft")
+        await update.message.reply_text("👋 للتواصل المباشر مع المطور للاستفسارات الدعم الفني:\n👉 t.me/AlhadiSoft")
         return
 
     if text.startswith("http://") or text.startswith("https://"):
@@ -84,62 +89,58 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [InlineKeyboardButton("🎬 تحميل فيديو MP4", callback_data="video")],
             [InlineKeyboardButton("🎵 تحويل إلى صوت MP3", callback_data="audio")]
         ]
-        await update.message.reply_text("📌 تم فحص الرابط بنجاح!\n\n👇 اختر صيغة الاستخراج المطلوبة:", reply_markup=InlineKeyboardMarkup(buttons))
+        await update.message.reply_text("📌 تم استلام وفحص الرابط بنجاح!\n\n👇 اختر صيغة الاستخراج المطلوبة:", reply_markup=InlineKeyboardMarkup(buttons))
     else:
         await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
 
-# 🛠️ دالة جلب الرابط المباشر وتحميله عبر محرك Cobalt العالمي السريع
-def cobalt_fetch_and_download(video_url, is_audio, output_path):
-    # مصفوفة سيرفرات Cobalt لضمان عدم توقف الخدمة أبداً
-    cobalt_api_instances = [
-        "https://api.cobalt.tools/api/json",
-        "https://cobalt.api.v0.pw/api/json",
-        "https://api.urlis.net/cobalt"
-    ]
+# 🛠️ محرك السحب المطور بأحدث تقنيات تخطي حماية يوتيوب (Anti-Bot Bypass)
+def download_processor(url, is_audio, output_template):
+    import yt_dlp
     
-    payload = {
-        "url": video_url,
-        "videoQuality": "720",
-        "audioFormat": "mp3",
-        "isAudioOnly": is_audio,
-        "filenamePattern": "basic"
+    # إعدادات التمويه المتقدمة لتخطي الـ Bot Detection لشركة جوجل
+    ydl_opts = {
+        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'log_造_info': False,
+        # 🛡️ الحيلة الكبرى: تمويه الهوية وإجبار السيرفر على استخدام عملاء تصفح مختلفة لكل طلب
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+        },
+        # تقييد مشغلات يوتيوب لاستخدام بروتوكولات الويب العادية (تجاوز حظر الـ Datacenter)
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        }
     }
     
-    data_bytes = json.dumps(payload).encode('utf-8')
-    direct_download_url = None
-    
-    for api in cobalt_api_instances:
-        try:
-            req = urllib.request.Request(
-                api, 
-                data=data_bytes, 
-                headers={
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0'
-                },
-                method='POST'
-            )
-            with urllib.request.urlopen(req, timeout=8) as response:
-                res_data = json.loads(response.read().decode('utf-8'))
-                if res_data.get("status") in ["stream", "redirect"]:
-                    direct_download_url = res_data.get("url")
-                    break
-        except Exception as e:
-            logger.warning(f"Cobalt instance {api} failed: {e}")
-            continue
-
-    if not direct_download_url:
-        raise Exception("فشلت جميع المحركات السحابية في معالجة الرابط، قد يكون المقطع خاص أو محظور.")
-
-    # تحميل الملف الفعلي من الرابط المباشر النظيف إلى السيرفر
-    logger.info(f"📥 Downloading direct media stream: {direct_download_url[:50]}...")
-    download_req = urllib.request.Request(direct_download_url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(download_req, timeout=60) as response:
-        with open(output_path, 'wb') as out_file:
-            out_file.write(response.read())
-            
-    return output_path
+    if is_audio:
+        ydl_opts.update({
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        })
+    else:
+        # سحب صيغة الـ mp4 المدمجة مباشرة لتجنب عمليات الدمج الطويلة التي تستهلك المعالج
+        ydl_opts.update({
+            'format': 'best[ext=mp4]/best',
+        })
+        
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        return ydl.prepare_filename(info)
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -152,25 +153,29 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ انتهت الجلسة الأمنية، يرجى إعادة إرسال الرابط مجدداً.")
         return
         
-    await query.edit_message_text("🔄 جاري إرسال الرابط لمحرك السحب السحابي المطور...")
+    await query.edit_message_text("🔄 جاري تهيئة نفق التمويه وتخطي جدار الحماية...")
     is_audio = (choice == "audio")
     
-    ext = "mp3" if is_audio else "mp4"
-    final_file = f"{chat_id}_hadi.{ext}"
+    base_name = f"{chat_id}_hadi"
+    output_template = f"{base_name}.%(ext)s"
     
     try:
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري سحب وتخطي حظر المنصة (بدون كوكيز)...")
+        await query.edit_message_text("🚀 جاري سحب البيانات المشفرة بأقصى سرعة...")
         
-        await loop.run_in_executor(None, cobalt_fetch_and_download, url, is_audio, final_file)
+        filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
+        final_file = f"{base_name}.mp3" if is_audio else filename
+        
+        if not os.path.exists(final_file) and not is_audio:
+             final_file = base_name + ".mp4"
              
-        await query.edit_message_text("⚡ اكتمل السحب بنجاح! جاري الرفع الفوري لـ تيليجرام...")
+        await query.edit_message_text("⚡ تم الاتصال والتحميل بنجاح! جاري النقل السريع إلى تيليجرام...")
         
         with open(final_file, 'rb') as f:
             if is_audio:
                 await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح - الهادي سوفت")
             else:
-                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم سحب الفيديو بنجاح - الهادي سوفت")
+                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
         
         if os.path.exists(final_file): os.remove(final_file)
         user_urls.pop(chat_id, None)
@@ -178,8 +183,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Engine Failure: {e}")
-        if os.path.exists(final_file): os.remove(final_file)
-        await update.effective_message.reply_text(f"❌ عذراً هندسة! واجه البوت عائقاً.\nالوصف: {str(e)[:110]}")
+        for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
+            if os.path.exists(base_name + ext): os.remove(base_name + ext)
+        await query.edit_message_text(f"❌ عذراً هندسة! واجه المحرك عائقاً جراء حماية المنصة الحالية.\nالوصف: {str(e)[:110]}")
 
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
@@ -193,7 +199,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft Cobalt Engine is operational!")
+    logger.info("🚀 AlhadiSoft Professional Anti-Block Engine is operational!")
     
     try:
         while True:
@@ -208,4 +214,4 @@ if __name__ == '__main__':
     except RuntimeError:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(main())
-        
+    
