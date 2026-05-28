@@ -1,2 +1,7 @@
-python-telegram-bot==21.1.1
-yt-dlp
+ydl_opts = {
+    'outtmpl': output_template,
+    'quiet': True,
+    # إضافة بروكسي عام يتغير تلقائياً لتخطي حظر السيرفرات السحابية
+    'proxy': 'http://pubproxy.com/api/proxy', 
+    'extractor_args': {'youtube': {'player_client': ['ios']}}
+}
