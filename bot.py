@@ -6,23 +6,16 @@ import http.server
 import socketserver
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.error import TelegramError
 
-# تفعيل وتثبيت FFmpeg تلقائياً داخل السيرفر السحابي
-try:
-    import static_ffmpeg
-    static_ffmpeg.add_paths()
-except Exception as e:
-    print(f"FFmpeg path notice: {e}")
-
+# إعدادات الـ Logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN", "8914679676:AAEeV07KSkz_w5y-qbESc0BTFxB9d5LOvhA")
-CHANNEL_ID = '@AlhadiSoft'
-CHANNEL_INVITE_LINK = 'https://t.me/+BIHVdkbZ_qY5OTM0'
 
+# قاموس لحفظ روابط المستخدمين وحالة القفل لمنع المعالجة المتزامنة لنفس المستخدم
 user_urls = {}
+user_locks = {}
 
 def start_dummy_server():
     port = int(os.environ.get("PORT", 8080))
@@ -30,100 +23,94 @@ def start_dummy_server():
     socketserver.TCPServer.allow_reuse_address = True
     try:
         with socketserver.TCPServer(("", port), handler) as httpd:
-            logger.info(f"✅ Web server trigger bound to port {port}")
+            logger.info(f"✅ Web server bound to port {port}")
             httpd.serve_forever()
     except Exception as e:
-        logger.warning(f"⚠️ Web server alert: {e}")
-
-async def is_subscribed(user_id: int, bot) -> bool:
-    try:
-        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        return member.status in ['member', 'administrator', 'creator']
-    except TelegramError:
-        return True 
+        logger.warning(f"⚠️ Web server notice: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not await is_subscribed(user_id, context.bot):
-        keyboard = [[InlineKeyboardButton("📢 اشترك في القناة هنا", url=CHANNEL_INVITE_LINK)]]
-        await update.message.reply_text(
-            "⚠️ عذراً هندسة! يجب عليك الاشتراك في قناة المؤسسة أولاً لتتمكن من استخدام البوت مجاناً.\n\n"
-            "👇 اشترك عبر الرابط أدناه ثم أرسل /start مجدداً للتحقق والتشغيل:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return
-
-    reply_keyboard = [
-        [KeyboardButton("🟢 Start")],
-        [KeyboardButton("💼 خدماتنا"), KeyboardButton("👥 فريق الدعم الهادي سوفت")]
-    ]
+    reply_keyboard = [[KeyboardButton("🟢 Start")]]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "🚀 أهلاً بك في تحديث المحرك الإحترافي المضاد للحظر - مؤسسة الهادي سوفت!\n\n👇 أرسل رابط الفيديو الآن (يوتيوب، فيسبوك، تيك توك، إنستغرام) وسيتم معالجته فوراً بأعلى جودة.",
+        "🚀 مرحباً بك في بوت سحب الوسائط الاحترافي المطور!\n\n👇 أرسل رابط الفيديو المُراد معالجته الآن.",
         reply_markup=markup
     )
 
 async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    user_id = update.effective_user.id
     chat_id = update.message.chat_id
     
-    if not await is_subscribed(user_id, context.bot):
-        keyboard = [[InlineKeyboardButton("📢 اشترك في القناة هنا", url=CHANNEL_INVITE_LINK)]]
-        await update.message.reply_text("⚠️ يرجى الاشتراك في القناة أولاً لتفعيل خدمات البوت:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
     if text == "🟢 Start":
-        await update.message.reply_text("🔄 المحرك المطور نشط وجاهز، أرسل الرابط الآن هندسة.")
-        return
-    elif text == "💼 خدماتنا":
-        await update.message.reply_text("🛠️ **خدمات مؤسسة الهادي سوفت:**\n\n👈 تطوير وترقية البوتات، كسر حظر السيرفرات، وحلول الشبكات والأنظمة البرمجية.")
-        return
-    elif text == "👥 فريق الدعم الهادي سوفت":
-        await update.message.reply_text("👋 للتواصل المباشر مع المطور للاستفسارات الدعم الفني:\n👉 t.me/AlhadiSoft")
+        await update.message.reply_text("🔄 النظام جاهز ومستقر، أرسل الرابط مباشرة.")
         return
 
     if text.startswith("http://") or text.startswith("https://"):
-        user_urls[chat_id] = text
-        buttons = [
-            [InlineKeyboardButton("🎬 تحميل فيديو MP4", callback_data="video")],
-            [InlineKeyboardButton("🎵 تحويل إلى صوت MP3", callback_data="audio")]
-        ]
-        await update.message.reply_text("📌 تم استلام وفحص الرابط بنجاح!\n\n👇 اختر صيغة الاستخراج المطلوبة:", reply_markup=InlineKeyboardMarkup(buttons))
-    else:
-        await update.message.reply_text("⚠️ يرجى إرسال رابط فيديو صحيح يبدأ بـ http أو https.")
+        # ⚠️ محاكاة نظام البوت المستهدف: التحقق مما إذا كان المستخدم يمتلك عملية قيد المعالجة حالياً
+        if user_locks.get(chat_id, False):
+            await update.message.reply_text(
+                "⚠️ عذراً، في الوقت الحالي يتم معالجة طلبك السابق بواسطة نظامنا.\n"
+                "انتظر حتى نهاية التنزيل أو حاول مرة أخرى لاحقاً خلال دقيقة."
+            )
+            return
 
-# 🛠️ محرك السحب المطور بأحدث تقنيات تخطي حماية يوتيوب (Anti-Bot Bypass)
-def download_processor(url, is_audio, output_template):
+        user_urls[chat_id] = text
+        
+        # جلب معلومات الفيديو وحجمه بشكل سريع لتوليد الأزرار الديناميكية
+        await update.message.reply_text("🔄 جاري فحص الرابط واستخراج الأحجام...")
+        
+        loop = asyncio.get_running_loop()
+        try:
+            info = await loop.run_in_executor(None, fetch_video_info, text)
+            filesize_str = info.get('size_str', 'غير محدد')
+            title = info.get('title', 'فيديو')
+            
+            buttons = [
+                [InlineKeyboardButton(f"📥 تحميل {title[:20]} ~ {filesize_str}", callback_data="video")],
+                [InlineKeyboardButton("🎵 قم بتنزيل الصوت (MP3)", callback_data="audio")],
+                [InlineKeyboardButton("📱 وضع متوافق مع Apple iOS", callback_data="ios")]
+            ]
+            await update.message.reply_text(
+                f"📊 **الاستخدام اليومي:**\nحركة المرور: متاح بالكامل\n\n**العنوان:** {title}\n\n👇 اختر صيغة التحميل المطلوبة:", 
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ فشل السيرفر في قراءة بيانات الرابط الحالية.\nالوصف: {str(e)[:50]}")
+    else:
+        await update.message.reply_text("⚠️ يرجى إرسال رابط صحيح يبدأ بـ http أو https.")
+
+# دالة سريعة لجلب بيانات المقطع وحجمه التقديمي
+def fetch_video_info(url):
     import yt_dlp
-    
-    # إعدادات التمويه المتقدمة لتخطي الـ Bot Detection لشركة جوجل
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        # محاولة حساب الحجم التقديري للملف
+        filesize = info.get('filesize') or info.get('filesize_approx')
+        if filesize:
+            size_mb = filesize / (1024 * 1024)
+            size_str = f"{size_mb:.2f} MB"
+        else:
+            size_str = "تحميل مباشر"
+        return {'title': info.get('title', 'Video'), 'size_str': size_str}
+
+# محرك السحب الهجين والآمن ضد الحظر
+def download_processor(url, mode, output_template):
+    import yt_dlp
     ydl_opts = {
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'nocheckcertificate': True,
-        'ignoreerrors': False,
-        'log_造_info': False,
-        # 🛡️ الحيلة الكبرى: تمويه الهوية وإجبار السيرفر على استخدام عملاء تصفح مختلفة لكل طلب
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
         },
-        # تقييد مشغلات يوتيوب لاستخدام بروتوكولات الويب العادية (تجاوز حظر الـ Datacenter)
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'skip': ['dash', 'hls']
-            }
-        }
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
     }
     
-    if is_audio:
+    if mode == "audio":
         ydl_opts.update({
             'format': 'bestaudio/best',
             'postprocessors': [{
@@ -132,8 +119,12 @@ def download_processor(url, is_audio, output_template):
                 'preferredquality': '192',
             }],
         })
+    elif mode == "ios":
+        # ترميز متوافق ومضمون لأجهزة أبل القديمة والحديثة
+        ydl_opts.update({
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        })
     else:
-        # سحب صيغة الـ mp4 المدمجة مباشرة لتجنب عمليات الدمج الطويلة التي تستهلك المعالج
         ydl_opts.update({
             'format': 'best[ext=mp4]/best',
         })
@@ -150,43 +141,46 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = user_urls.get(chat_id)
     
     if not url:
-        await query.edit_message_text("❌ انتهت الجلسة الأمنية، يرجى إعادة إرسال الرابط مجدداً.")
+        await query.edit_message_text("❌ انتهت الجلسة الأمنية، يرجى إعادة إرسال الرابط.")
         return
         
-    await query.edit_message_text("🔄 جاري تهيئة نفق التمويه وتخطي جدار الحماية...")
-    is_audio = (choice == "audio")
+    # تفعيل قفل المستخدم لحمايته من إرسال روابط أخرى أثناء التحميل
+    user_locks[chat_id] = True
+    await query.edit_message_text("🔄 جاري سحب وتجهيز ملف الوسائط عبر النفق السحابي الخاص...")
     
     base_name = f"{chat_id}_hadi"
     output_template = f"{base_name}.%(ext)s"
     
     try:
         loop = asyncio.get_running_loop()
-        await query.edit_message_text("🚀 جاري سحب البيانات المشفرة بأقصى سرعة...")
+        filename = await loop.run_in_executor(None, download_processor, url, choice, output_template)
         
-        filename = await loop.run_in_executor(None, download_processor, url, is_audio, output_template)
-        final_file = f"{base_name}.mp3" if is_audio else filename
-        
-        if not os.path.exists(final_file) and not is_audio:
+        final_file = f"{base_name}.mp3" if choice == "audio" else filename
+        if not os.path.exists(final_file) and choice != "audio":
              final_file = base_name + ".mp4"
              
-        await query.edit_message_text("⚡ تم الاتصال والتحميل بنجاح! جاري النقل السريع إلى تيليجرام...")
+        await query.edit_message_text("⚡ اكتمل التنزيل بنجاح! جاري الرفع الفوري للمنصة...")
         
         with open(final_file, 'rb') as f:
-            if is_audio:
-                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح - الهادي سوفت")
+            if choice == "audio":
+                await context.bot.send_audio(chat_id=chat_id, audio=f, caption="🎵 تم استخراج الصوت بنجاح.")
             else:
-                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم كسر الحظر وتنزيل الفيديو بنجاح - الهادي سوفت")
+                await context.bot.send_video(chat_id=chat_id, video=f, caption="🎬 تم تحميل المقطع بنجاح.")
         
         if os.path.exists(final_file): os.remove(final_file)
         user_urls.pop(chat_id, None)
         await query.delete_message()
         
     except Exception as e:
-        logger.error(f"Engine Failure: {e}")
-        for ext in ['.mp4', '.mp3', '.m4a', '.webm', '.3gp']:
+        logger.error(f"Error: {e}")
+        for ext in ['.mp4', '.mp3', '.m4a', '.webm']:
             if os.path.exists(base_name + ext): os.remove(base_name + ext)
-        await query.edit_message_text(f"❌ عذراً هندسة! واجه المحرك عائقاً جراء حماية المنصة الحالية.\nالوصف: {str(e)[:110]}")
+        await query.edit_message_text(f"❌ عذراً! واجه السيرفر عائقاً أثناء المعالجة النفقية.\nالوصف: {str(e)[:60]}")
+    finally:
+        # إزالة القفل بعد انتهاء العملية تماماً سواء نجحت أو فشلت
+        user_locks[chat_id] = False
 
+# 🛠️ حل مشكلة الـ Loop عبر معالج إقلاع السيرفر الحديث والمستقر
 async def main():
     threading.Thread(target=start_dummy_server, daemon=True).start()
     
@@ -199,8 +193,7 @@ async def main():
     await app.updater.start_polling()
     await app.start()
     
-    logger.info("🚀 AlhadiSoft Professional Anti-Block Engine is operational!")
-    
+    logger.info("🚀 System initialized safely on all cloud platforms!")
     try:
         while True:
             await asyncio.sleep(3600)
@@ -209,9 +202,14 @@ async def main():
         await app.stop()
 
 if __name__ == '__main__':
+    # حائط الصد النهائي لمنع خطأ RuntimeError في السيرفرات السحابية
     try:
-        asyncio.run(main())
-    except RuntimeError:
         loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    if loop.is_running():
+        nested_task = loop.create_task(main())
+    else:
         loop.run_until_complete(main())
-    
